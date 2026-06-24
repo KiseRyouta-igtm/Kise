@@ -325,36 +325,90 @@ with tab1:
         fig.patch.set_facecolor('#192B3C')
         ax.set_facecolor('#192B3C')
 
-        bars = ax.bar(['Baseline\n(Kondisi Saat Ini)', 'Intervensi\n(Skenario Baru)'],
-                      [baseline_pred, pred],
-                      color=['#1E3448', '#00C9A7'],
-                      width=0.45,
-                      edgecolor='none',
-                      zorder=3)
+        # Choose intervention bar color by sign
+        interv_color = '#00C9A7' if pred >= 0 else '#EF476F'
+        bar_colors   = ['#4A6FA5', interv_color]
+
+        bars = ax.bar(
+            ['Baseline\n(Kondisi Saat Ini)', 'Intervensi\n(Skenario Baru)'],
+            [baseline_pred, pred],
+            color=bar_colors,
+            width=0.45,
+            edgecolor='none',
+            zorder=3
+        )
+
+        # Reference line at y=0
+        ax.axhline(y=0, color='#E8F0FE', linewidth=1.0, alpha=0.4, zorder=4)
 
         # Baseline dashed line
         ax.axhline(y=baseline_pred, color='#FFB703', linestyle='--', linewidth=1.2, alpha=0.6, zorder=2)
 
-        # Value labels on bars
-        for bar in bars:
-            h = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., h + 1.5,
-                    f'Rp {h:.1f} Jt',
-                    ha='center', va='bottom',
-                    color='#E8F0FE', fontsize=11, fontweight='600',
-                    fontfamily='DejaVu Sans')
+        # Value labels — above bar if positive, below if negative
+        for bar, val in zip(bars, [baseline_pred, pred]):
+            x_center = bar.get_x() + bar.get_width() / 2.
+            if val >= 0:
+                ax.text(x_center, val + abs(ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.02,
+                        f'Rp {val:.1f} Jt',
+                        ha='center', va='bottom',
+                        color='#E8F0FE', fontsize=10, fontweight='600')
+            else:
+                ax.text(x_center, val - abs(ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.02,
+                        f'Rp {val:.1f} Jt',
+                        ha='center', va='top',
+                        color='#EF476F', fontsize=10, fontweight='600')
 
-        # Delta annotation
+        # Delta arrow annotation
         if abs(delta) > 0.5:
-            x_mid = 0.5
+            arrow_color = '#00C9A7' if delta > 0 else '#EF476F'
             ax.annotate('', xy=(1, pred), xytext=(1, baseline_pred),
-                        arrowprops=dict(arrowstyle='<->', color='#FFB703', lw=1.5))
-            ax.text(1.28, (baseline_pred + pred) / 2,
+                        arrowprops=dict(arrowstyle='<->', color=arrow_color, lw=1.8))
+            mid_y = (baseline_pred + pred) / 2
+            ax.text(1.30, mid_y,
                     f'Δ {delta:+.1f} Jt',
-                    color='#FFB703', fontsize=10, va='center', fontweight='600')
+                    color=arrow_color, fontsize=10, va='center', fontweight='700')
+
+        # Dynamic Y-axis limits
+        all_vals = [baseline_pred, pred, 0]
+        y_min_raw = min(all_vals)
+        y_max_raw = max(all_vals)
+        y_padding = max((y_max_raw - y_min_raw) * 0.30, 15)
+        ax.set_ylim(y_min_raw - y_padding, y_max_raw + y_padding)
+
+        # Re-draw labels now that ylim is set
+        ax.cla()
+        ax.set_facecolor('#192B3C')
+        bars = ax.bar(
+            ['Baseline\n(Kondisi Saat Ini)', 'Intervensi\n(Skenario Baru)'],
+            [baseline_pred, pred],
+            color=bar_colors, width=0.45, edgecolor='none', zorder=3
+        )
+        ax.axhline(y=0, color='#E8F0FE', linewidth=1.0, alpha=0.4, zorder=4)
+        ax.axhline(y=baseline_pred, color='#FFB703', linestyle='--', linewidth=1.2, alpha=0.6, zorder=2)
+        ax.set_ylim(y_min_raw - y_padding, y_max_raw + y_padding)
+        y_range = ax.get_ylim()[1] - ax.get_ylim()[0]
+        label_offset = y_range * 0.03
+
+        for val in [baseline_pred, pred]:
+            idx = 0 if val == baseline_pred else 1
+            bar = bars[idx]
+            x_c = bar.get_x() + bar.get_width() / 2.
+            if val >= 0:
+                ax.text(x_c, val + label_offset, f'Rp {val:.1f} Jt',
+                        ha='center', va='bottom', color='#E8F0FE', fontsize=10, fontweight='600')
+            else:
+                ax.text(x_c, val - label_offset, f'Rp {val:.1f} Jt',
+                        ha='center', va='top', color='#EF476F', fontsize=10, fontweight='600')
+
+        if abs(delta) > 0.5:
+            arrow_color = '#00C9A7' if delta > 0 else '#EF476F'
+            ax.annotate('', xy=(1, pred), xytext=(1, baseline_pred),
+                        arrowprops=dict(arrowstyle='<->', color=arrow_color, lw=1.8))
+            ax.text(1.30, (baseline_pred + pred) / 2,
+                    f'Δ {delta:+.1f} Jt',
+                    color=arrow_color, fontsize=10, va='center', fontweight='700')
 
         ax.set_ylabel('Keuntungan (Juta Rp)', color='#8BA7BF', fontsize=9)
-        ax.set_ylim(0, max(pred, baseline_pred) * 1.35)
         ax.tick_params(colors='#8BA7BF', labelsize=9)
         for sp in ax.spines.values():
             sp.set_visible(False)
@@ -367,13 +421,13 @@ with tab1:
     with col_b:
         st.markdown("<div class='section-title'>🔍 Detail Delta Analysis</div>", unsafe_allow_html=True)
 
-        # Delta status
-        if delta > 5:
+        # Delta status — tiga kondisi eksak
+        if delta > 0:
             status_color, status_icon, status_txt = "#00C9A7", "✅", "Skenario MENGUNTUNGKAN"
-        elif delta >= 0:
-            status_color, status_icon, status_txt = "#FFB703", "⚠️", "Perubahan MINIMAL"
-        else:
+        elif delta < 0:
             status_color, status_icon, status_txt = "#EF476F", "❌", "Skenario MERUGIKAN"
+        else:
+            status_color, status_icon, status_txt = "#FFB703", "⚠️", "Tidak Ada Perubahan"
 
         st.markdown(f"""
         <div style="background:#132233; border:1px solid {status_color}; border-radius:12px; padding:20px; margin-bottom:16px;">
